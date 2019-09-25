@@ -107,6 +107,9 @@ class PE(Metric):
     def __init__(self):
         self.unit = Unit.none
         self.error = []
+        self.xerror = []
+        self.yerror = []
+        self.zerror = []
 
     def __str__(self):
         return "PE metric base class"
@@ -121,6 +124,12 @@ class PE(Metric):
 
     def get_statistic(self, statistics_type):
         if statistics_type == StatisticsType.rmse:
+            xrmse = math.sqrt(np.mean(np.power(self.xerror, 2)))
+            yrmse = math.sqrt(np.mean(np.power(self.yerror, 2)))
+            zrmse = math.sqrt(np.mean(np.power(self.zerror, 2)))
+            rmse = np.sqrt(np.mean(np.power(self.error, 2)))
+            print("+++++ \nX RMSE = %f\nY RMSE = %f\nZ RMSE = %f\nRMSE   = %f\n+++++" %(xrmse, yrmse, zrmse, rmse))
+
             squared_errors = np.power(self.error, 2)
             return math.sqrt(np.mean(squared_errors))
         elif statistics_type == StatisticsType.sse:
@@ -195,6 +204,9 @@ class RPE(PE):
         self.all_pairs = all_pairs
         self.E = []
         self.error = []
+        self.xerror = []
+        self.yerror = []
+        self.zerror = []
         self.delta_ids = []
         if pose_relation == PoseRelation.translation_part:
             self.unit = Unit.meters
@@ -272,6 +284,15 @@ class RPE(PE):
             for i, j in id_pairs
         ]
 
+        self.xerror = [
+            np.abs(np.abs(traj_est.positions_xyz[i,0] - traj_est.positions_xyz[j,0]) - np.abs(traj_ref.positions_xyz[i,0] - traj_ref.positions_xyz[j,0])) for i, j in id_pairs
+        ]
+        self.yerror = [
+            np.abs(np.abs(traj_est.positions_xyz[i,1] - traj_est.positions_xyz[j,1]) - np.abs(traj_ref.positions_xyz[i,1] - traj_ref.positions_xyz[j,1])) for i, j in id_pairs
+        ]
+        self.zerror = [
+            np.abs(np.abs(traj_est.positions_xyz[i,2] - traj_est.positions_xyz[j,2]) - np.abs(traj_ref.positions_xyz[i,2] - traj_ref.positions_xyz[j,2])) for i, j in id_pairs
+        ]
         logger.debug(
             "Compared {} relative pose pairs, delta = {} ({}) {}".format(
                 len(self.E), self.delta, self.delta_unit.value,
@@ -282,21 +303,26 @@ class RPE(PE):
             self.pose_relation.value))
 
         if self.pose_relation == PoseRelation.translation_part:
+            print("+++++ RPE translation_part")
             self.error = [np.linalg.norm(E_i[:3, 3]) for E_i in self.E]
         elif self.pose_relation == PoseRelation.rotation_part:
+            print("+++++ RPE rotation_part")
             # ideal: rot(E_i) = 3x3 identity
             self.error = np.array([
                 np.linalg.norm(lie.so3_from_se3(E_i) - np.eye(3))
                 for E_i in self.E
             ])
         elif self.pose_relation == PoseRelation.full_transformation:
+            print("+++++ RPE full_transformation")
             # ideal: E_i = 4x4 identity
             self.error = np.array(
                 [np.linalg.norm(E_i - np.eye(4)) for E_i in self.E])
         elif self.pose_relation == PoseRelation.rotation_angle_rad:
+            print("+++++ RPE rotation_angle_rad")
             self.error = np.array(
                 [abs(lie.so3_log(E_i[:3, :3])) for E_i in self.E])
         elif self.pose_relation == PoseRelation.rotation_angle_deg:
+            print("+++++ RPE rotation_angle_deg")
             self.error = np.array([
                 abs(lie.so3_log(E_i[:3, :3])) * 180 / np.pi for E_i in self.E
             ])
@@ -315,6 +341,9 @@ class APE(PE):
         self.pose_relation = pose_relation
         self.E = []
         self.error = []
+        self.xerror = []
+        self.yerror = []
+        self.zerror = []
         if pose_relation == PoseRelation.translation_part:
             self.unit = Unit.meters
         elif pose_relation == PoseRelation.rotation_angle_deg:
@@ -366,6 +395,10 @@ class APE(PE):
         if self.pose_relation == PoseRelation.translation_part:
             # don't require full SE(3) matrices for faster computation
             self.E = traj_est.positions_xyz - traj_ref.positions_xyz
+            # +++++ add
+            self.xerror = traj_est.positions_xyz[:,0] - traj_ref.positions_xyz[:,0]
+            self.yerror = traj_est.positions_xyz[:,1] - traj_ref.positions_xyz[:,1]
+            self.zerror = traj_est.positions_xyz[:,2] - traj_ref.positions_xyz[:,2]
         else:
             self.E = [
                 self.ape_base(x_t, x_t_star) for x_t, x_t_star in zip(
@@ -379,17 +412,21 @@ class APE(PE):
             # E is an array of position vectors only in this case
             self.error = [np.linalg.norm(E_i) for E_i in self.E]
         elif self.pose_relation == PoseRelation.rotation_part:
+            print("+++++ APE rotation_part")
             self.error = np.array([
                 np.linalg.norm(lie.so3_from_se3(E_i) - np.eye(3))
                 for E_i in self.E
             ])
         elif self.pose_relation == PoseRelation.full_transformation:
+            print("+++++ APE full_transformation")
             self.error = np.array(
                 [np.linalg.norm(E_i - np.eye(4)) for E_i in self.E])
         elif self.pose_relation == PoseRelation.rotation_angle_rad:
+            print("+++++ APE rotation_angle_rad")
             self.error = np.array(
                 [abs(lie.so3_log(E_i[:3, :3])) for E_i in self.E])
         elif self.pose_relation == PoseRelation.rotation_angle_deg:
+            print("+++++ APE rotation_angle_deg")
             self.error = np.array([
                 abs(lie.so3_log(E_i[:3, :3])) * 180 / np.pi for E_i in self.E
             ])
