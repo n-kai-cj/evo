@@ -25,6 +25,8 @@ from __future__ import print_function
 
 import logging
 
+from evo.tools.settings import SETTINGS
+
 logger = logging.getLogger(__name__)
 
 SEP = "-" * 80  # separator line
@@ -32,6 +34,7 @@ SEP = "-" * 80  # separator line
 
 def parser():
     import argparse
+
     basic_desc = "Relative pose error (RPE) metric app"
     lic = "(c) evo authors"
 
@@ -74,7 +77,8 @@ def parser():
         help="show plot window",
     )
     output_opts.add_argument(
-        "--plot_mode", default="xyz", help="the axes for plot projection",
+        "--plot_mode", default=SETTINGS.plot_mode_default,
+        help="the axes for plot projection",
         choices=["xy", "xz", "yx", "yz", "zx", "zy", "xyz"])
     output_opts.add_argument(
         "--plot_colormap_max", type=float,
@@ -94,6 +98,9 @@ def parser():
         action="store_true",
         help="plot the full, unsynchronized reference trajectory",
     )
+    output_opts.add_argument(
+        "--ros_map_yaml", help="yaml file of an ROS 2D map image (.pgm/.png)"
+        " that will be drawn into the plot", default=None)
     output_opts.add_argument("--save_plot", default=None,
                              help="path to save plot")
     output_opts.add_argument("--serialize_plot", default=None,
@@ -226,10 +233,8 @@ def rpe(traj_ref, traj_est, pose_relation, delta, delta_unit,
 
 def run(args):
     import evo.common_ape_rpe as common
-    from evo import EvoException
     from evo.core import sync
     from evo.tools import file_interface, log
-    from evo.tools.settings import SETTINGS
 
     log.configure_logging(args.verbose, args.silent, args.debug,
                           local_logfile=args.logfile)
@@ -238,10 +243,6 @@ def run(args):
         parser_str = pformat({arg: getattr(args, arg) for arg in vars(args)})
         logger.debug("main_parser config:\n{}".format(parser_str))
     logger.debug(SEP)
-
-    if (args.plot or args.save_plot or args.serialize_plot) and args.all_pairs:
-        raise EvoException(
-            "all_pairs mode cannot be used with plotting functions")
 
     traj_ref, traj_est, ref_name, est_name = common.load_trajectories(args)
     pose_relation = common.get_pose_relation(args)
@@ -274,9 +275,8 @@ def run(args):
     )
 
     if args.plot or args.save_plot or args.serialize_plot:
-        common.plot(args, result,
-                    traj_ref_full if args.plot_full_ref else traj_ref,
-                    result.trajectories[est_name])
+        common.plot(args, result, traj_ref, result.trajectories[est_name],
+                    traj_ref_full=traj_ref_full)
 
     if args.save_results:
         logger.debug(SEP)

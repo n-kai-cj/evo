@@ -25,6 +25,8 @@ from __future__ import print_function
 
 import logging
 
+from evo.tools.settings import SETTINGS
+
 logger = logging.getLogger(__name__)
 
 SEP = "-" * 80
@@ -41,12 +43,12 @@ def parser():
     shared_parser.add_argument("-f", "--full_check",
                                help="run all checks and print all stats",
                                action="store_true")
-    algo_opts.add_argument(
-        "-a", "--align", help="alignment with Umeyama's method (no scale)"
-        " - requires --ref", action="store_true")
-    algo_opts.add_argument(
-        "-s", "--correct_scale", help="scale correction with Umeyama's method"
-        " - requires --ref", action="store_true")
+    algo_opts.add_argument("-a", "--align",
+                           help="alignment with Umeyama's method (no scale)"
+                           " - requires --ref", action="store_true")
+    algo_opts.add_argument("-s", "--correct_scale",
+                           help="scale correction with Umeyama's method"
+                           " - requires --ref", action="store_true")
     algo_opts.add_argument(
         "--n_to_align",
         help="the number of poses to use for Umeyama alignment, "
@@ -87,9 +89,18 @@ def parser():
     output_opts.add_argument("-p", "--plot", help="show plot window",
                              action="store_true")
     output_opts.add_argument(
-        "--plot_mode", help="the axes for  plot projection", default="xyz",
+        "--plot_relative_time", action="store_true",
+        help="show timestamps relative to the start of the reference")
+    output_opts.add_argument(
+        "--plot_mode", help="the axes for  plot projection",
+        default=SETTINGS.plot_mode_default,
         choices=["xy", "xz", "yx", "yz", "zx", "zy", "xyz"])
+    output_opts.add_argument(
+        "--ros_map_yaml", help="yaml file of an ROS 2D map image (.pgm/.png)"
+        " that will be drawn into the plot", default=None)
     output_opts.add_argument("--save_plot", help="path to save plot",
+                             default=None)
+    output_opts.add_argument("--save_table", help="path to save table with statistics",
                              default=None)
     output_opts.add_argument("--serialize_plot",
                              help="path to serialize plot (experimental)",
@@ -119,28 +130,25 @@ def parser():
         "-c", "--config",
         help=".json file with parameters (priority over command line args)")
 
-    main_parser = argparse.ArgumentParser(
-        description="%s %s" % (basic_desc, lic))
+    main_parser = argparse.ArgumentParser(description="%s %s" % (basic_desc,
+                                                                 lic))
     sub_parsers = main_parser.add_subparsers(dest="subcommand")
     sub_parsers.required = True
     kitti_parser = sub_parsers.add_parser(
-        "kitti",
-        description="%s for KITTI pose files - %s" % (basic_desc, lic),
-        parents=[shared_parser])
+        "kitti", description="%s for KITTI pose files - %s" %
+        (basic_desc, lic), parents=[shared_parser])
     kitti_parser.add_argument("pose_files", help="one or multiple pose files",
                               nargs='+')
 
     tum_parser = sub_parsers.add_parser(
-        "tum",
-        description="%s for TUM trajectory files - %s" % (basic_desc, lic),
-        parents=[shared_parser])
+        "tum", description="%s for TUM trajectory files - %s" %
+        (basic_desc, lic), parents=[shared_parser])
     tum_parser.add_argument("traj_files",
                             help="one or multiple trajectory files", nargs='+')
 
     euroc_parser = sub_parsers.add_parser(
-        "euroc",
-        description="%s for EuRoC MAV .csv's - %s" % (basic_desc, lic),
-        parents=[shared_parser])
+        "euroc", description="%s for EuRoC MAV .csv's - %s" %
+        (basic_desc, lic), parents=[shared_parser])
     euroc_parser.add_argument(
         "state_gt_csv",
         help="<sequence>/mav0/state_groundtruth_estimate0/data.csv", nargs='+')
@@ -202,15 +210,16 @@ def load_trajectories(args):
             raise file_interface.FileInterfaceException(
                 "File doesn't exist: {}".format(args.bag))
         import rosbag
+        logger.debug("Opening bag file " + args.bag)
         bag = rosbag.Bag(args.bag)
         try:
             if args.all_topics:
-                topics = file_interface.get_supported_topics(bag)
+                topics = args.topics + file_interface.get_supported_topics(bag)
                 if args.ref in topics:
                     topics.remove(args.ref)
                 if len(topics) == 0:
-                    die("No topics of supported types: {}".format(" ".join(
-                        file_interface.SUPPORTED_ROS_MSGS)))
+                    die("No topics of supported types: {}".format(
+                        " ".join(file_interface.SUPPORTED_ROS_MSGS)))
             else:
                 topics = args.topics
             for topic in topics:
@@ -275,7 +284,6 @@ def run(args):
     from evo.core import trajectory
     from evo.core.trajectory import PoseTrajectory3D
     from evo.tools import file_interface, log
-    from evo.tools.settings import SETTINGS
 
     log.configure_logging(verbose=args.verbose, silent=args.silent,
                           debug=args.debug, local_logfile=args.logfile)
@@ -326,7 +334,12 @@ def run(args):
     if args.n_to_align != -1 and not (args.align or args.correct_scale):
         die("--n_to_align is useless without --align or/and --correct_scale")
 
-    if args.sync or args.align or args.correct_scale or args.align_origin:
+    # TODO: this is fugly, but is a quick solution for remembering each synced
+    # reference when plotting pose correspondences later...
+    synced = (args.subcommand == "kitti" and ref_traj) or any(
+        (args.sync, args.align, args.correct_scale, args.align_origin))
+    synced_refs = {}
+    if synced:
         from evo.core import sync
         if not args.ref:
             logger.debug(SEP)
@@ -352,6 +365,8 @@ def run(args):
                 logger.debug("Aligning {}'s origin to reference.".format(name))
                 trajectories[name] = trajectory.align_trajectory_origin(
                     trajectories[name], ref_traj_tmp)
+            if SETTINGS.plot_pose_correspondences:
+                synced_refs[name] = ref_traj_tmp
 
     print_compact_name = not args.subcommand == "bag"
     for name, traj in trajectories.items():
@@ -368,16 +383,23 @@ def run(args):
         import matplotlib.cm as cm
 
         plot_collection = plot.PlotCollection("evo_traj - trajectory plot")
-        fig_xyz, axarr_xyz = plt.subplots(3, sharex="col",
-                                          figsize=tuple(SETTINGS.plot_figsize))
-        fig_rpy, axarr_rpy = plt.subplots(3, sharex="col",
-                                          figsize=tuple(SETTINGS.plot_figsize))
+        fig_xyz, axarr_xyz = plt.subplots(3, sharex="col", figsize=tuple(
+            SETTINGS.plot_figsize))
+        fig_rpy, axarr_rpy = plt.subplots(3, sharex="col", figsize=tuple(
+            SETTINGS.plot_figsize))
         fig_traj = plt.figure(figsize=tuple(SETTINGS.plot_figsize))
 
         plot_mode = plot.PlotMode[args.plot_mode]
         ax_traj = plot.prepare_axis(fig_traj, plot_mode)
 
+        # for x-axis alignment starting from 0 with --plot_relative_time
+        start_time = None
+
         if args.ref:
+            if isinstance(ref_traj, trajectory.PoseTrajectory3D) \
+                    and args.plot_relative_time:
+                start_time = ref_traj.timestamps[0]
+
             short_traj_name = os.path.splitext(os.path.basename(args.ref))[0]
             if SETTINGS.plot_usetex:
                 short_traj_name = short_traj_name.replace("_", "\\_")
@@ -386,14 +408,21 @@ def run(args):
                       color=SETTINGS.plot_reference_color,
                       label=short_traj_name,
                       alpha=SETTINGS.plot_reference_alpha)
+            plot.draw_coordinate_axes(ax_traj, ref_traj, plot_mode,
+                                      SETTINGS.plot_axis_marker_scale)
             plot.traj_xyz(
                 axarr_xyz, ref_traj, style=SETTINGS.plot_reference_linestyle,
                 color=SETTINGS.plot_reference_color, label=short_traj_name,
-                alpha=SETTINGS.plot_reference_alpha)
+                alpha=SETTINGS.plot_reference_alpha,
+                start_timestamp=start_time)
             plot.traj_rpy(
                 axarr_rpy, ref_traj, style=SETTINGS.plot_reference_linestyle,
                 color=SETTINGS.plot_reference_color, label=short_traj_name,
-                alpha=SETTINGS.plot_reference_alpha)
+                alpha=SETTINGS.plot_reference_alpha,
+                start_timestamp=start_time)
+
+        if args.ros_map_yaml:
+            plot.ros_map(ax_traj, args.ros_map_yaml, plot_mode)
 
         cmap_colors = None
         if SETTINGS.plot_multi_cmap.lower() != "none":
@@ -411,20 +440,26 @@ def run(args):
                 short_traj_name = name
             if SETTINGS.plot_usetex:
                 short_traj_name = short_traj_name.replace("_", "\\_")
-            plot.traj(ax_traj, plot_mode, traj, '-', color, short_traj_name,
-                      alpha=SETTINGS.plot_trajectory_alpha)
-            if args.ref and isinstance(ref_traj, trajectory.PoseTrajectory3D):
-                start_time = ref_traj.timestamps[0]
-            else:
-                start_time = None
-            plot.traj_xyz(axarr_xyz, traj, '-', color, short_traj_name,
+            plot.traj(ax_traj, plot_mode, traj,
+                      SETTINGS.plot_trajectory_linestyle, color,
+                      short_traj_name, alpha=SETTINGS.plot_trajectory_alpha)
+            plot.draw_coordinate_axes(ax_traj, traj, plot_mode,
+                                      SETTINGS.plot_axis_marker_scale)
+            if ref_traj and synced and SETTINGS.plot_pose_correspondences:
+                plot.draw_correspondence_edges(
+                    ax_traj, traj, synced_refs[name], plot_mode, color=color,
+                    style=SETTINGS.plot_pose_correspondences_linestyle,
+                    alpha=SETTINGS.plot_trajectory_alpha)
+            plot.traj_xyz(axarr_xyz, traj, SETTINGS.plot_trajectory_linestyle,
+                          color, short_traj_name,
                           alpha=SETTINGS.plot_trajectory_alpha,
                           start_timestamp=start_time)
-            plot.traj_rpy(axarr_rpy, traj, '-', color, short_traj_name,
+            plot.traj_rpy(axarr_rpy, traj, SETTINGS.plot_trajectory_linestyle,
+                          color, short_traj_name,
                           alpha=SETTINGS.plot_trajectory_alpha,
                           start_timestamp=start_time)
-            fig_rpy.text(
-                0., 0.005, "euler_angle_sequence: {}".format(
+            if not SETTINGS.plot_usetex:
+                fig_rpy.text(0., 0.005, "euler_angle_sequence: {}".format(
                     SETTINGS.euler_angle_sequence), fontsize=6)
 
         plot_collection.add_figure("trajectories", fig_traj)
@@ -484,6 +519,13 @@ def run(args):
                                                     frame_id)
         finally:
             bag.close()
+
+    if args.save_table:
+        from evo.tools import pandas_bridge
+        logger.debug(SEP)
+        df = pandas_bridge.trajectories_stats_to_df(trajectories)
+        pandas_bridge.save_df_as_table(df, args.save_table,
+                                       confirm_overwrite=not args.no_warnings)
 
 
 if __name__ == '__main__':

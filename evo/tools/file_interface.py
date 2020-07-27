@@ -242,9 +242,16 @@ def get_supported_topics(bag_handle):
 def read_bag_trajectory(bag_handle, topic):
     """
     :param bag_handle: opened bag handle, from rosbag.Bag(...)
-    :param topic: trajectory topic of supported message type
+    :param topic: trajectory topic of supported message type,
+                  or a TF trajectory ID (e.g.: '/tf:map.base_link' )
     :return: trajectory.PoseTrajectory3D
     """
+    from evo.tools import tf_cache
+
+    # Use TfCache instead if it's a TF transform ID.
+    if tf_cache.instance().check_id(topic):
+        return tf_cache.instance().get_trajectory(bag_handle, identifier=topic)
+
     if not bag_handle.get_message_count(topic) > 0:
         raise FileInterfaceException("no messages for topic '" + topic +
                                      "' in bag")
@@ -305,39 +312,40 @@ def write_bag_trajectory(bag_handle, traj, topic_name, frame_id=""):
 
 def save_res_file(zip_path, result_obj, confirm_overwrite=False):
     """
-    save results of a pose error metric (pe_metric) to a zip file
-    :param zip_path: path to zip file
+    save results to a zip file that can be deserialized with load_res_file()
+    :param zip_path: path to zip file (or file handle)
     :param result_obj: evo.core.result.Result instance
     :param confirm_overwrite: whether to require user interaction
            to overwrite existing files
     """
-    from tempfile import TemporaryFile
-    logger.debug("Saving results to " + zip_path + "...")
+    if isinstance(zip_path, str):
+        logger.debug("Saving results to " + zip_path + "...")
     if confirm_overwrite and not user.check_and_confirm_overwrite(zip_path):
         return
     with zipfile.ZipFile(zip_path, 'w') as archive:
         archive.writestr("info.json", json.dumps(result_obj.info))
         archive.writestr("stats.json", json.dumps(result_obj.stats))
         for name, array in result_obj.np_arrays.items():
-            tmp_file = TemporaryFile()
-            np.save(tmp_file, array)
-            tmp_file.seek(0)
-            archive.writestr("{}.npz".format(name), tmp_file.read())
-            tmp_file.close()
+            buffer = io.BytesIO()
+            np.save(buffer, array)
+            buffer.seek(0)
+            archive.writestr("{}.npz".format(name), buffer.read())
+            buffer.close()
         for name, traj in result_obj.trajectories.items():
-            tmp_file = TemporaryFile()
+            buffer = io.StringIO()
             if type(traj) is PosePath3D:
                 fmt_suffix = ".kitti"
-                write_kitti_poses_file(tmp_file, traj)
+                write_kitti_poses_file(buffer, traj)
             elif type(traj) is PoseTrajectory3D:
                 fmt_suffix = ".tum"
-                write_tum_trajectory_file(tmp_file, traj)
+                write_tum_trajectory_file(buffer, traj)
             else:
                 raise FileInterfaceException(
                     "unknown format of trajectory {}".format(name))
-            tmp_file.seek(0)
-            archive.writestr("{}{}".format(name, fmt_suffix), tmp_file.read())
-            tmp_file.close()
+            buffer.seek(0)
+            archive.writestr("{}{}".format(name, fmt_suffix),
+                             buffer.read().encode("utf-8"))
+            buffer.close()
 
 
 def load_res_file(zip_path, load_trajectories=False):

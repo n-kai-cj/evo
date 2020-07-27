@@ -47,9 +47,23 @@ DEFAULT_SETTINGS_DICT_DOC = {
          "E.g. 'sxyz' or 'ryxy', where s=static or r=rotating frame.\n"
          "See evo/core/transformations.py for more information.")
     ),
+    "plot_axis_marker_scale": (
+        0.,
+        "Scaling parameter of pose coordinate frame markers. 0 will draw nothing."
+    ),
     "plot_backend": (
         get_default_plot_backend(),
         "matplotlib backend - default: 'Qt{4, 5}Agg' (if PyQt is installed) or 'TkAgg'."
+    ),
+    "plot_pose_correspondences": (
+        False,
+        "If enabled, lines will be plotted that connect corresponding poses"
+        " between the reference and synced trajectories."
+    ),
+    "plot_pose_correspondences_linestyle": (
+        "dotted",
+        "Style of pose correspondence markers: "
+        "'solid', 'dashed', 'dashdot' or 'dotted'"
     ),
     "plot_statistics": (
         ["rmse", "median", "mean", "std", "min", "max"],
@@ -83,6 +97,10 @@ DEFAULT_SETTINGS_DICT_DOC = {
     "plot_linewidth": (
         1.5,
         "Line width value supported by matplotlib."
+    ),
+    "plot_mode_default": (
+        "xyz",
+        "Default value for --plot_mode used in evo_{traj, ape, rpe}."
     ),
     "plot_multi_cmap": (
         "none",
@@ -128,6 +146,10 @@ DEFAULT_SETTINGS_DICT_DOC = {
         "jet",
         "matplotlib color map used for mapping values on a trajectory.",
     ),
+    "plot_trajectory_linestyle": (
+        "-",
+        "matplotlib linestyle of non-reference trajectories in plots.",
+    ),
     "plot_usetex": (
         False,
         "Use the LaTeX renderer configured in plot_texsystem for plots.",
@@ -135,6 +157,17 @@ DEFAULT_SETTINGS_DICT_DOC = {
     "plot_xyz_realistic": (
         True,
         "Equal axes ratio in 'xyz' plot mode for realistic trajectory plots."
+    ),
+    "ros_map_alpha_value": (
+        1.0,
+        "Alpha value for blending ROS map image slices."
+    ),
+    "ros_map_unknown_cell_value": (
+        205,
+        "uint8 value that represents unknown cells in a ROS map image.\n"
+        "Used to remove unknown cell pixels when a ROS map is added to a plot."
+        "\nmap_saver uses 205, other tools might not.\n"
+        "(for example, Cartographer uses 128 for images of probability grids)"
     ),
     "save_traj_in_zip": (
         False,
@@ -151,6 +184,15 @@ DEFAULT_SETTINGS_DICT_DOC = {
     "table_export_transpose": (
         True,
         "Transpose tables for export."
+    ),
+    "tf_cache_lookup_frequency": (
+        10,
+        "Frequency for looking up transformations when loading trajectories \n"
+        "from a TF topic, in Hz."
+    ),
+    "tf_cache_max_time": (
+        1e4,
+        "TF transform cache time in seconds."
     ),
 }
 # yapf: enable
