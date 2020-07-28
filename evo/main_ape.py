@@ -170,6 +170,18 @@ def ape(traj_ref, traj_est, pose_relation, align=False, correct_scale=False,
         logger.debug(SEP)
         traj_est = trajectory.align_trajectory_origin(traj_est, traj_ref)
 
+    # output aligned trajectories
+    with open("{}_aligned.csv".format(est_name), 'w') as out:
+        for i in range(0, len(traj_est.timestamps)):
+            pos = traj_est._positions_xyz[i]
+            q = traj_est._orientations_quat_wxyz[i]
+            out.write("{},{},{},{},{},{},{},{}\n".format(traj_est.timestamps[i], pos[0], pos[1], pos[2], q[1], q[2], q[3], q[0]))
+    with open("{}_aligned.csv".format(ref_name), 'w') as out:
+        for i in range(0, len(traj_ref.timestamps)):
+            pos = traj_ref._positions_xyz[i]
+            q = traj_ref._orientations_quat_wxyz[i]
+            out.write("{},{},{},{},{},{},{},{}\n".format(traj_ref.timestamps[i], pos[0], pos[1], pos[2], q[1], q[2], q[3], q[0]))
+
     # Calculate APE.
     logger.debug(SEP)
     data = (traj_ref, traj_est)

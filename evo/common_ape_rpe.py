@@ -71,7 +71,7 @@ def load_trajectories(args):
     # ref q
     new_ref_q = []
     new_q_list = np.insert(traj_ref._orientations_quat_wxyz, 0, traj_ref._orientations_quat_wxyz[0], axis=0)
-    new_ts_list = np.insert(traj_ref.timestamps, 0, 0)
+    new_ts_list = np.insert(traj_ref.timestamps, 0, new_ref_ts[0])
     for i in range(0, len(new_q_list)-1):
         if i == 0:
             new_ref_q.append(new_q_list[i])
@@ -105,7 +105,7 @@ def load_trajectories(args):
     # est q
     new_est_q = []
     new_q_list = np.insert(traj_est._orientations_quat_wxyz, 0, traj_est._orientations_quat_wxyz[0], axis=0)
-    new_ts_list = np.insert(traj_est.timestamps, 0, 0)
+    new_ts_list = np.insert(traj_est.timestamps, 0, new_est_ts[0])
     for i in range(0, len(new_q_list)-1):
         if i == 0:
             new_est_q.append(new_q_list[i])
