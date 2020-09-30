@@ -57,92 +57,94 @@ def load_trajectories(args):
     else:
         raise KeyError("unknown sub-command: {}".format(args.subcommand))
 
-    ##### +++++ add interpolate below #####
-    import numpy as np
-    from scipy import interpolate
-    from pyquaternion import Quaternion
+    #####+++++ add interpolate below #####
+    if args.interpolate:
+        import numpy as np
+        from scipy import interpolate
+        from pyquaternion import Quaternion
 
-    kind = 'cubic'
-    fill_val = 'extrapolate'
+        kind = 'cubic'
+        fill_val = 'extrapolate'
+        step = args.interpolate_step
 
-
-    new_ref_ts = np.arange(traj_ref.timestamps[0], traj_ref.timestamps[-1], 1.0)
-    # ref q
-    new_ref_q = []
-    new_q_list = np.insert(traj_ref._orientations_quat_wxyz, 0, traj_ref._orientations_quat_wxyz[0], axis=0)
-    new_ts_list = np.insert(traj_ref.timestamps, 0, new_ref_ts[0])
-    for i in range(0, len(new_q_list)-1):
-        if i == 0:
-            new_ref_q.append(new_q_list[i])
-        q0 = Quaternion(new_q_list[i])
-        q1 = Quaternion(new_q_list[i+1])
-        t0 = new_ts_list[i]
-        t1 = new_ts_list[i+1]
-        for j in range(1, int(t1-t0)):
-            q = Quaternion.slerp(q0, q1, j/float(t1-t0))
-            new_ref_q.append([q.w, q.x, q.y, q.z])
+        new_ref_ts = np.arange(traj_ref.timestamps[0], traj_ref.timestamps[-1], step)
+        # ref q
+        new_ref_q = []
+        new_q_list = np.insert(traj_ref._orientations_quat_wxyz, 0, traj_ref._orientations_quat_wxyz[0], axis=0)
+        new_ts_list = np.insert(traj_ref.timestamps, 0, new_ref_ts[0])
+        for i in range(0, len(new_q_list)-1):
+            if i == 0:
+                new_ref_q.append(new_q_list[i])
+            q0 = Quaternion(new_q_list[i])
+            q1 = Quaternion(new_q_list[i+1])
+            t0 = new_ts_list[i]
+            t1 = new_ts_list[i+1]
+            for j in range(1, int(t1-t0)):
+                q = Quaternion.slerp(q0, q1, j/float(t1-t0))
+                new_ref_q.append([q.w, q.x, q.y, q.z])
+                if len(new_ref_q) >= len(new_ref_ts):
+                    break
             if len(new_ref_q) >= len(new_ref_ts):
                 break
-        if len(new_ref_q) >= len(new_ref_ts):
-            break
-        new_ref_q.append(new_q_list[i+1])
-    while len(new_ref_q) < len(new_ref_ts):
-        new_ref_q.append(new_q_list[-1])
-    new_ref_q = np.reshape(new_ref_q, [len(new_ref_ts), 4])
+            new_ref_q.append(new_q_list[i+1])
+        while len(new_ref_q) < len(new_ref_ts):
+            new_ref_q.append(new_q_list[-1])
+        new_ref_q = np.reshape(new_ref_q, [len(new_ref_ts), 4])
 
-    # ref xyz
-    fx = interpolate.interp1d(traj_ref.timestamps, traj_ref._positions_xyz[:,0], kind=kind, fill_value=fill_val)
-    fy = interpolate.interp1d(traj_ref.timestamps, traj_ref._positions_xyz[:,1], kind=kind, fill_value=fill_val)
-    fz = interpolate.interp1d(traj_ref.timestamps, traj_ref._positions_xyz[:,2], kind=kind, fill_value=fill_val)
-    new_ref_xyz = []
-    x,y,z = (fx(new_ref_ts), fy(new_ref_ts), fz(new_ref_ts))
-    for i in range(0,len(new_ref_ts)):
-        new_ref_xyz.append([x[i],y[i],z[i]])
-    new_ref_xyz = np.reshape(new_ref_xyz, [len(new_ref_ts), 3])
+        # ref xyz
+        fx = interpolate.interp1d(traj_ref.timestamps, traj_ref._positions_xyz[:,0], kind=kind, fill_value=fill_val)
+        fy = interpolate.interp1d(traj_ref.timestamps, traj_ref._positions_xyz[:,1], kind=kind, fill_value=fill_val)
+        fz = interpolate.interp1d(traj_ref.timestamps, traj_ref._positions_xyz[:,2], kind=kind, fill_value=fill_val)
+        new_ref_xyz = []
+        x,y,z = (fx(new_ref_ts), fy(new_ref_ts), fz(new_ref_ts))
+        for i in range(0,len(new_ref_ts)):
+            new_ref_xyz.append([x[i],y[i],z[i]])
+        new_ref_xyz = np.reshape(new_ref_xyz, [len(new_ref_ts), 3])
 
-    new_est_ts = np.arange(traj_est.timestamps[0], traj_est.timestamps[-1], 1.0)
-    # est q
-    new_est_q = []
-    new_q_list = np.insert(traj_est._orientations_quat_wxyz, 0, traj_est._orientations_quat_wxyz[0], axis=0)
-    new_ts_list = np.insert(traj_est.timestamps, 0, new_est_ts[0])
-    for i in range(0, len(new_q_list)-1):
-        if i == 0:
-            new_est_q.append(new_q_list[i])
-        q0 = Quaternion(new_q_list[i])
-        q1 = Quaternion(new_q_list[i+1])
-        t0 = new_ts_list[i]
-        t1 = new_ts_list[i+1]
-        for j in range(1, int(t1-t0)):
-            q = Quaternion.slerp(q0, q1, j/float(t1-t0))
-            new_est_q.append([q.w, q.x, q.y, q.z])
+        new_est_ts = np.arange(traj_est.timestamps[0], traj_est.timestamps[-1], step)
+        # est q
+        new_est_q = []
+        new_q_list = np.insert(traj_est._orientations_quat_wxyz, 0, traj_est._orientations_quat_wxyz[0], axis=0)
+        new_ts_list = np.insert(traj_est.timestamps, 0, new_est_ts[0])
+        for i in range(0, len(new_q_list)-1):
+            if i == 0:
+                new_est_q.append(new_q_list[i])
+            q0 = Quaternion(new_q_list[i])
+            q1 = Quaternion(new_q_list[i+1])
+            t0 = new_ts_list[i]
+            t1 = new_ts_list[i+1]
+            for j in range(1, int(t1-t0)):
+                q = Quaternion.slerp(q0, q1, j/float(t1-t0))
+                new_est_q.append([q.w, q.x, q.y, q.z])
+                if len(new_est_q) >= len(new_est_ts):
+                    break
             if len(new_est_q) >= len(new_est_ts):
                 break
-        if len(new_est_q) >= len(new_est_ts):
-            break
-        new_est_q.append(new_q_list[i+1])
-    while len(new_est_q) < len(new_est_ts):
-        new_est_q.append(new_q_list[-1])
-    new_est_q = np.reshape(new_est_q, [len(new_est_ts), 4])
+            new_est_q.append(new_q_list[i+1])
+        while len(new_est_q) < len(new_est_ts):
+            new_est_q.append(new_q_list[-1])
+        new_est_q = np.reshape(new_est_q, [len(new_est_ts), 4])
 
-    # est xyz
-    fx = interpolate.interp1d(traj_est.timestamps, traj_est._positions_xyz[:,0], kind=kind, fill_value=fill_val)
-    fy = interpolate.interp1d(traj_est.timestamps, traj_est._positions_xyz[:,1], kind=kind, fill_value=fill_val)
-    fz = interpolate.interp1d(traj_est.timestamps, traj_est._positions_xyz[:,2], kind=kind, fill_value=fill_val)
-    new_est_xyz = []
-    x,y,z = (fx(new_est_ts), fy(new_est_ts), fz(new_est_ts))
-    for i in range(0,len(new_est_ts)):
-        new_est_xyz.append([x[i],y[i],z[i]])
-    new_est_xyz = np.reshape(new_est_xyz, [len(new_est_ts), 3])
+        # est xyz
+        fx = interpolate.interp1d(traj_est.timestamps, traj_est._positions_xyz[:,0], kind=kind, fill_value=fill_val)
+        fy = interpolate.interp1d(traj_est.timestamps, traj_est._positions_xyz[:,1], kind=kind, fill_value=fill_val)
+        fz = interpolate.interp1d(traj_est.timestamps, traj_est._positions_xyz[:,2], kind=kind, fill_value=fill_val)
+        new_est_xyz = []
+        x,y,z = (fx(new_est_ts), fy(new_est_ts), fz(new_est_ts))
+        for i in range(0,len(new_est_ts)):
+            new_est_xyz.append([x[i],y[i],z[i]])
+        new_est_xyz = np.reshape(new_est_xyz, [len(new_est_ts), 3])
 
-    # update traj
-    print("+++++ interpolated ref: {}->{}, est: {}->{}".format(len(traj_ref.timestamps), len(new_ref_ts), len(traj_est.timestamps), len(new_est_ts)))
-    traj_ref.timestamps = new_ref_ts
-    traj_ref._positions_xyz = new_ref_xyz
-    traj_ref._orientations_quat_wxyz = new_ref_q
-    traj_est.timestamps = new_est_ts
-    traj_est._positions_xyz = new_est_xyz
-    traj_est._orientations_quat_wxyz = new_est_q
-    ##### +++++ add interpolate above #####
+        # update traj
+        traj_ref.timestamps = new_ref_ts
+        traj_ref._positions_xyz = new_ref_xyz
+        traj_ref._orientations_quat_wxyz = new_ref_q
+        traj_est.timestamps = new_est_ts
+        traj_est._positions_xyz = new_est_xyz
+        traj_est._orientations_quat_wxyz = new_est_q
+        print("+++++ interpolate {}, {}".format(len(traj_ref.timestamps), len(traj_est.timestamps)))
+        ##### add interpolate above #####
+
     return traj_ref, traj_est, ref_name, est_name
 
 

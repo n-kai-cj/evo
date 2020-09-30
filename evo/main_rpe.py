@@ -113,6 +113,12 @@ def parser():
                              help=".zip file path to store results")
     output_opts.add_argument("--logfile", help="Local logfile path.",
                              default=None)
+    output_opts.add_argument("--output", type=bool, default=False,
+                             help="output aligned and sync trajectories to files")
+    output_opts.add_argument("--interpolate", type=bool, default=False,
+                             help="interpolate trajectories")
+    output_opts.add_argument("--interpolate_step", type=float, default=1.0,
+                             help="interpolate steps")
     usability_opts.add_argument("--no_warnings", action="store_true",
                                 help="no warnings requiring user confirmation")
     usability_opts.add_argument("-v", "--verbose", action="store_true",
@@ -281,6 +287,19 @@ def run(args):
         ref_name=ref_name,
         est_name=est_name,
     )
+
+    #####+++++ output aligned trajectories #####
+    if args.output:
+        with open("{}_aligned.csv".format(est_name), 'w') as out:
+            for i in range(0, len(traj_est.timestamps)):
+                pos = traj_est._positions_xyz[i]
+                q = traj_est._orientations_quat_wxyz[i]
+                out.write("{},{},{},{},{},{},{},{}\n".format(traj_est.timestamps[i], pos[0], pos[1], pos[2], q[1], q[2], q[3], q[0]))
+        with open("{}_aligned.csv".format(ref_name), 'w') as out:
+            for i in range(0, len(traj_ref.timestamps)):
+                pos = traj_ref._positions_xyz[i]
+                q = traj_ref._orientations_quat_wxyz[i]
+                out.write("{},{},{},{},{},{},{},{}\n".format(traj_ref.timestamps[i], pos[0], pos[1], pos[2], q[1], q[2], q[3], q[0]))
 
     if args.plot or args.save_plot or args.serialize_plot:
         common.plot(args, result, traj_ref, result.trajectories[est_name],
